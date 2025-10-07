@@ -78,6 +78,11 @@ func init() {
 		}
 		return !reg.Match([]byte(a)), nil
 	}})
+
+	// Functions for Unwrap
+	unaryFunctions.register(types.UnaryOpUnwrap, arrow.BinaryTypes.String, unwrapFn(types.UnaryOpUnwrap))
+	unaryFunctions.register(types.UnaryOpUnwrapBytes, arrow.BinaryTypes.String, unwrapFn(types.UnaryOpUnwrapBytes))
+	unaryFunctions.register(types.UnaryOpUnwrapDuration, arrow.BinaryTypes.String, unwrapFn(types.UnaryOpUnwrapDuration))
 }
 
 type UnaryFunctionRegistry interface {
@@ -87,6 +92,12 @@ type UnaryFunctionRegistry interface {
 
 type UnaryFunction interface {
 	Evaluate(lhs ColumnVector) (ColumnVector, error)
+}
+
+type UnaryFunc func(ColumnVector) (ColumnVector, error)
+
+func (f UnaryFunc) Evaluate(lhs ColumnVector) (ColumnVector, error) {
+	return f(lhs)
 }
 
 type unaryFuncReg struct {
@@ -106,8 +117,18 @@ func (u *unaryFuncReg) register(op types.UnaryOp, ltype arrow.DataType, f UnaryF
 }
 
 // GetForSignature implements UnaryFunctionRegistry.
-func (u *unaryFuncReg) GetForSignature(types.UnaryOp, arrow.DataType) (UnaryFunction, error) {
-	return nil, errors.ErrNotImplemented
+func (u *unaryFuncReg) GetForSignature(op types.UnaryOp, ltype arrow.DataType) (UnaryFunction, error) {
+	// Get registered functions for the specific operation
+	reg, ok := u.reg[op]
+	if !ok {
+		return nil, errors.ErrNotImplemented
+	}
+	// Get registered function for the specific data type
+	fn, ok := reg[ltype]
+	if !ok {
+		return nil, errors.ErrNotImplemented
+	}
+	return fn, nil
 }
 
 type BinaryFunctionRegistry interface {

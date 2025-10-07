@@ -477,3 +477,30 @@ func convertParserKind(kind logical.ParserKind) ParserKind {
 		return ParserInvalid
 	}
 }
+
+// TODO: implement unwrap as a projection
+// func (p *Planner) processUnwrapValue(inst *logical.UnwrapValue, ctx *Context) ([]Node, error) {
+// 	node := &Projection{
+// 		id: inst.Name(),
+// 		Columns: []ColumnExpression{
+// 			NewUnwrapExpr(
+// 				inst.Identifier,
+// 				types.GetUnwrapOp(inst.UnwrapOperation),
+// 			),
+// 		},
+// 	}
+// 	p.plan.addNode(node)
+//
+// 	children, err := p.process(inst.Table, ctx)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+//
+// 	for i := range children {
+// 		if err := p.plan.addEdge(Edge{Parent: node, Child: children[i]}); err != nil {
+// 			return nil, err
+// 		}
+// 	}
+//
+// 	return []Node{node}, nil
+// }

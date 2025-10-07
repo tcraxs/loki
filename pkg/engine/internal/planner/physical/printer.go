@@ -45,7 +45,7 @@ func toTreeNode(n Node) *tree.Node {
 		}
 	case *Projection:
 		treeNode.Properties = []tree.Property{
-			tree.NewProperty("columns", true, toAnySlice(node.Columns)...),
+			tree.NewProperty("columns", true, toAnySlice(node.Expressions)...),
 		}
 	case *Filter:
 		for i := range node.Predicates {

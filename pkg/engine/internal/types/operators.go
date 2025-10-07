@@ -1,6 +1,8 @@
 package types //nolint:revive
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // UnaryOp denotes the kind of [UnaryOp] operation to perform.
 type UnaryOp uint32
@@ -10,8 +12,11 @@ const (
 	// UnaryOpKindInvalid indicates an invalid unary operation.
 	UnaryOpInvalid UnaryOp = iota
 
-	UnaryOpNot // Logical NOT operation (!).
-	UnaryOpAbs // Mathematical absolute operation (abs).
+	UnaryOpNot            // Logical NOT operation (!).
+	UnaryOpAbs            // Mathematical absolute operation (abs).
+	UnaryOpUnwrap         // Unwrap string to float value operation (unwrap).
+	UnaryOpUnwrapBytes    // Unwrap string bytes to float value operation (unwrap).
+	UnaryOpUnwrapDuration // Unwrap string duration to float value operation (unwrap).
 )
 
 // String returns the string representation of the UnaryOp.
@@ -107,5 +112,31 @@ func (t BinaryOp) String() string {
 		return "NOT_MATCH_PAT" // convenience for NOT(MATCH_PAT(...))
 	default:
 		panic(fmt.Sprintf("unknown binary operator %d", t))
+	}
+}
+
+// UnwrapOp denotes the kind of [UnwrapOp] operation to perform.
+type UnwrapOp uint32
+
+// Recognized values of [UnwrapOp].
+const (
+	// UnwrapOpInvalid indicates an invalid unwrap operation.
+	UnwrapOpInvalid UnwrapOp = iota
+	Unwrap
+	UnwrapBytes
+	UnwrapDuration
+	UnwrapDurationSeconds
+)
+
+func (t UnwrapOp) String() string {
+	switch t {
+	case Unwrap:
+		return "unwrap"
+	case UnwrapBytes:
+		return "unwrap bytes"
+	case UnwrapDuration:
+		return "unwrap duration"
+	default:
+		panic(fmt.Sprintf("unknown unwrap operation %d", t))
 	}
 }
