@@ -398,7 +398,16 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 		alloc := memory.NewCheckedAllocator(memory.DefaultAllocator)
 		defer alloc.AssertSize(t, 0) // Assert empty on test exit
 		e := newExpressionEvaluator(alloc)
-		colExpr := physical.NewUnwrapExpr("does_not_exist", types.Unwrap)
+		// colExpr := physical.NewUnwrapExpr("does_not_exist", types.Unwrap)
+		colExpr := &physical.UnaryExpr{
+			Left: &physical.ColumnExpr{
+				Ref: types.ColumnRef{
+					Column: "does_not_exist",
+					Type:   types.ColumnTypeAmbiguous,
+				},
+			},
+			Op: types.UnaryOpUnwrap,
+		}
 
 		n := len(words)
 		rec := batch(n, time.Now())
@@ -408,7 +417,16 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 	})
 
 	t.Run("unwrap column generates a value", func(t *testing.T) {
-		colExpr := physical.NewUnwrapExpr("status_code", types.Unwrap)
+		// colExpr := physical.NewUnwrapExpr("status_code", types.Unwrap)
+		colExpr := &physical.UnaryExpr{
+			Left: &physical.ColumnExpr{
+				Ref: types.ColumnRef{
+					Column: "status_code",
+					Type:   types.ColumnTypeAmbiguous,
+				},
+			},
+			Op: types.UnaryOpUnwrap,
+		}
 
 		alloc := memory.NewCheckedAllocator(memory.DefaultAllocator)
 		defer alloc.AssertSize(t, 0) // Assert empty on test exit
@@ -456,7 +474,16 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 	})
 
 	t.Run("unwrap tracks errors", func(t *testing.T) {
-		colExpr := physical.NewUnwrapExpr("mixed_values", types.Unwrap)
+		// colExpr := physical.NewUnwrapExpr("mixed_values", types.Unwrap)
+		colExpr := &physical.UnaryExpr{
+			Left: &physical.ColumnExpr{
+				Ref: types.ColumnRef{
+					Column: "mixed_values",
+					Type:   types.ColumnTypeAmbiguous,
+				},
+			},
+			Op: types.UnaryOpUnwrap,
+		}
 
 		alloc := memory.NewCheckedAllocator(memory.DefaultAllocator)
 		defer alloc.AssertSize(t, 0) // Assert empty on test exit

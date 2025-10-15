@@ -120,12 +120,42 @@ func (e expressionEvaluator) eval(expr physical.Expression, input arrow.Record) 
 			return nil, err
 		}
 
-		fn, err := unaryFunctions.GetForSignature(expr.Op, lhr.Type().ArrowType())
-		if err != nil {
-			return nil, fmt.Errorf("failed to lookup unary function: %w", err)
-		}
-		return fn.Evaluate(lhr)
+		switch expr.Op {
+		case types.UnaryOpUnwrap, types.UnaryOpUnwrapBytes, types.UnaryOpUnwrapDuration:
+			columnExpr, ok := expr.Left.(*physical.ColumnExpr)
+			if !ok {
+				return nil, fmt.Errorf("expected column expression, got %T", expr.Left)
+			}
 
+			var unwrapOp types.UnwrapOp
+			switch expr.Op {
+			case types.UnaryOpUnwrap:
+				unwrapOp = types.Unwrap
+			case types.UnaryOpUnwrapBytes:
+				unwrapOp = types.UnwrapBytes
+			case types.UnaryOpUnwrapDuration:
+				unwrapOp = types.UnwrapDuration
+			default:
+				unwrapOp = types.Unwrap
+			}
+
+			arr, err := unwrap(unwrapOp, columnExpr.Ref.Column, input, e.allocator)
+			if err != nil {
+				return nil, err
+			}
+
+			return &ArrayStruct{
+				array: arr,
+				ct:    types.ColumnTypeGenerated,
+				rows:  input.NumRows(),
+			}, nil
+		default:
+			fn, err := unaryFunctions.GetForSignature(expr.Op, lhr.Type().ArrowType())
+			if err != nil {
+				return nil, fmt.Errorf("failed to lookup unary function: %w", err)
+			}
+			return fn.Evaluate(lhr)
+		}
 	case *physical.BinaryExpr:
 		lhs, err := e.eval(expr.Left, input)
 		if err != nil {

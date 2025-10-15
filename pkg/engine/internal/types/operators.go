@@ -10,8 +10,11 @@ const (
 	// UnaryOpKindInvalid indicates an invalid unary operation.
 	UnaryOpInvalid UnaryOp = iota
 
-	UnaryOpNot // Logical NOT operation (!).
-	UnaryOpAbs // Mathematical absolute operation (abs).
+	UnaryOpNot            // Logical NOT operation (!).
+	UnaryOpAbs            // Mathematical absolute operation (abs).
+	UnaryOpUnwrap         // Unwrap string to float value operation (unwrap).
+	UnaryOpUnwrapBytes    // Unwrap string bytes to float value operation (unwrap).
+	UnaryOpUnwrapDuration // Unwrap string duration to float value operation (unwrap).
 )
 
 // String returns the string representation of the UnaryOp.
