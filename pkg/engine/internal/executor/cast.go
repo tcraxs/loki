@@ -10,34 +10,41 @@ import (
 	"github.com/apache/arrow-go/v18/arrow/memory"
 	"github.com/dustin/go-humanize"
 
+	"github.com/grafana/loki/v3/pkg/engine/internal/semconv"
 	"github.com/grafana/loki/v3/pkg/engine/internal/types"
 )
 
-func unwrapFn(operation types.UnaryOp) UnaryFunction {
-	//TODO: change signature of Evaluate to add this alloc parameter
-	alloc := memory.DefaultAllocator
-	return UnaryFunc(func(input ColumnVector) (ColumnVector, error) {
-		sourceCol, ok := input.ToArray().(*array.String)
+func castFn(operation types.UnaryOp) UnaryFunction {
+	return UnaryFunc(func(input ColumnVector, allocator memory.Allocator) (ColumnVector, error) {
+		arr := input.ToArray()
+		defer arr.Release()
+
+		sourceCol, ok := arr.(*array.String)
 		if !ok {
-			return nil, fmt.Errorf("expected column to be of type string, got %T", input.ToArray())
+			return nil, fmt.Errorf("expected column to be of type string, got %T", arr)
 		}
 
 		// Get conversion function and process values
 		conversionFn := getConversionFunction(operation)
-		unwrappedCol, errTracker := convertValues(sourceCol, conversionFn, alloc)
+		castCol, errTracker := castValues(sourceCol, conversionFn, allocator)
+		defer castCol.Release()
 
 		// Build error columns if needed
 		errorCol, errorDetailsCol := errTracker.buildArrays()
 		defer errTracker.releaseBuilders()
+		if errTracker.hasErrors {
+			defer errorCol.Release()
+			defer errorDetailsCol.Release()
+		}
 
 		// Build output schema and record
 		fields := buildOutputFields(errTracker.hasErrors)
-		arr, err := buildResult(unwrappedCol, errorCol, errorDetailsCol, fields)
+		result, err := buildResult(castCol, errorCol, errorDetailsCol, fields)
 		if err != nil {
 			return nil, err
 		}
 		return &ArrayStruct{
-			array: arr,
+			array: result,
 			ct:    types.ColumnTypeGenerated,
 			rows:  input.Len(),
 		}, nil
@@ -48,43 +55,43 @@ type conversionFn func(value string) (float64, error)
 
 func getConversionFunction(operation types.UnaryOp) conversionFn {
 	switch operation {
-	case types.UnaryOpUnwrapBytes:
+	case types.UnaryOpCastBytes:
 		return convertBytes
-	case types.UnaryOpUnwrapDuration:
+	case types.UnaryOpCastDuration:
 		return convertDuration
 	default:
 		return convertFloat
 	}
 }
 
-func convertValues(
+func castValues(
 	sourceCol *array.String,
 	conversionFn conversionFn,
 	allocator memory.Allocator,
 ) (arrow.Array, *errorTracker) {
-	unwrappedBuilder := array.NewFloat64Builder(allocator)
-	defer unwrappedBuilder.Release()
+	castBuilder := array.NewFloat64Builder(allocator)
+	defer castBuilder.Release()
 
 	tracker := newErrorTracker(allocator)
 
 	for i := 0; i < sourceCol.Len(); i++ {
 		if sourceCol.IsNull(i) {
-			unwrappedBuilder.AppendNull()
+			castBuilder.AppendNull()
 			tracker.recordSuccess()
 		} else {
 			valueStr := sourceCol.Value(i)
 			if val, err := conversionFn(valueStr); err == nil {
-				unwrappedBuilder.Append(val)
+				castBuilder.Append(val)
 				tracker.recordSuccess()
 			} else {
 				// Use 0.0 as default for errors, for backwards compatibility with old engine
-				unwrappedBuilder.Append(0.0)
+				castBuilder.Append(0.0)
 				tracker.recordError(i, err)
 			}
 		}
 	}
 
-	return unwrappedBuilder.NewArray(), tracker
+	return castBuilder.NewArray(), tracker
 }
 
 func buildOutputFields(
@@ -93,37 +100,13 @@ func buildOutputFields(
 	fields := make([]arrow.Field, 0, 3)
 
 	// Add value field
-	fields = append(fields, arrow.Field{
-		Name: types.ColumnNameGeneratedValue,
-		Type: arrow.PrimitiveTypes.Float64,
-		Metadata: types.ColumnMetadata(
-			types.ColumnTypeGenerated,
-			types.Loki.Float,
-		),
-		Nullable: true,
-	})
+	fields = append(fields, semconv.FieldFromIdent(semconv.ColumnIdentValue, false))
 
 	// Add error fields if needed
 	if hasErrors {
 		fields = append(fields,
-			arrow.Field{
-				Name: types.ColumnNameError,
-				Type: arrow.BinaryTypes.String,
-				Metadata: types.ColumnMetadata(
-					types.ColumnTypeParsed,
-					types.Loki.String,
-				),
-				Nullable: true,
-			},
-			arrow.Field{
-				Name: types.ColumnNameErrorDetails,
-				Type: arrow.BinaryTypes.String,
-				Metadata: types.ColumnMetadata(
-					types.ColumnTypeParsed,
-					types.Loki.String,
-				),
-				Nullable: true,
-			},
+			semconv.FieldFromIdent(semconv.ColumnIdentError, true),
+			semconv.FieldFromIdent(semconv.ColumnIdentErrorDetails, true),
 		)
 	}
 
@@ -131,7 +114,7 @@ func buildOutputFields(
 }
 
 func buildResult(
-	unwrappedCol, errorCol, errorDetailsCol arrow.Array,
+	castCol, errorCol, errorDetailsCol arrow.Array,
 	fields []arrow.Field,
 ) (*array.Struct, error) {
 	hasErrors := errorCol != nil
@@ -144,23 +127,14 @@ func buildResult(
 	columns := make([]arrow.Array, totalCols)
 
 	// Add new columns - these are newly created so don't need extra retain
-	columns[0] = unwrappedCol
+	columns[0] = castCol
 	if hasErrors {
 		columns[1] = errorCol
 		columns[2] = errorDetailsCol
 	}
 
 	// NewStructArrayWithFields will retain all columns
-	result, err := array.NewStructArrayWithFields(columns, fields)
-
-	// Release our references to newly created columns (result now owns them)
-	unwrappedCol.Release()
-	if hasErrors {
-		errorCol.Release()
-		errorDetailsCol.Release()
-	}
-
-	return result, err
+	return array.NewStructArrayWithFields(columns, fields)
 }
 
 func convertFloat(v string) (float64, error) {

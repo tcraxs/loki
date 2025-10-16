@@ -79,10 +79,10 @@ func init() {
 		return !reg.Match([]byte(a)), nil
 	}})
 
-	// Functions for Unwrap
-	unaryFunctions.register(types.UnaryOpUnwrap, arrow.BinaryTypes.String, unwrapFn(types.UnaryOpUnwrap))
-	unaryFunctions.register(types.UnaryOpUnwrapBytes, arrow.BinaryTypes.String, unwrapFn(types.UnaryOpUnwrapBytes))
-	unaryFunctions.register(types.UnaryOpUnwrapDuration, arrow.BinaryTypes.String, unwrapFn(types.UnaryOpUnwrapDuration))
+	// Cast functions
+	unaryFunctions.register(types.UnaryOpCastFloat, arrow.BinaryTypes.String, castFn(types.UnaryOpCastFloat))
+	unaryFunctions.register(types.UnaryOpCastBytes, arrow.BinaryTypes.String, castFn(types.UnaryOpCastBytes))
+	unaryFunctions.register(types.UnaryOpCastDuration, arrow.BinaryTypes.String, castFn(types.UnaryOpCastDuration))
 }
 
 type UnaryFunctionRegistry interface {
@@ -91,13 +91,13 @@ type UnaryFunctionRegistry interface {
 }
 
 type UnaryFunction interface {
-	Evaluate(lhs ColumnVector) (ColumnVector, error)
+	Evaluate(lhs ColumnVector, allocator memory.Allocator) (ColumnVector, error)
 }
 
-type UnaryFunc func(ColumnVector) (ColumnVector, error)
+type UnaryFunc func(ColumnVector, memory.Allocator) (ColumnVector, error)
 
-func (f UnaryFunc) Evaluate(lhs ColumnVector) (ColumnVector, error) {
-	return f(lhs)
+func (f UnaryFunc) Evaluate(lhs ColumnVector, allocator memory.Allocator) (ColumnVector, error) {
+	return f(lhs, allocator)
 }
 
 type unaryFuncReg struct {

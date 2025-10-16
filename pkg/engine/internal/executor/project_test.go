@@ -203,9 +203,9 @@ Dave,40
 
 	t.Run("project with no columns selects all", func(t *testing.T) {
 		schema := arrow.NewSchema([]arrow.Field{
-			{Name: "name", Type: types.Arrow.String, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.String)},
-			{Name: "age", Type: types.Arrow.Integer, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.Integer)},
-			{Name: "city", Type: types.Arrow.String, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.String)},
+			semconv.FieldFromFQN("utf8.builtin.name", true),
+			semconv.FieldFromFQN("int64.builtin.age", true),
+			semconv.FieldFromFQN("utf8.builtin.city", true),
 		}, nil)
 
 		inputRows := arrowtest.Rows{
@@ -264,7 +264,7 @@ func createAmbiguousColumnRef(name string) types.ColumnRef {
 	}
 }
 
-func TestNewProjectPipeline_ProjectionFunction_Unwrap(t *testing.T) {
+func TestNewProjectPipeline_ProjectionFunction_Cast(t *testing.T) {
 	for _, tt := range []struct {
 		name           string
 		schema         *arrow.Schema
@@ -274,228 +274,228 @@ func TestNewProjectPipeline_ProjectionFunction_Unwrap(t *testing.T) {
 		expectedOutput arrowtest.Rows
 	}{
 		{
-			name: "unwrap numeric value from label",
+			name: "cast numeric value from label",
 			schema: arrow.NewSchema([]arrow.Field{
-				{Name: types.ColumnNameBuiltinMessage, Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.String)},
-				{Name: "status_code", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeMetadata, types.Loki.String)},
-				{Name: "response_time", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeParsed, types.Loki.String)},
+				semconv.FieldFromIdent(semconv.ColumnIdentMessage, false),
+				semconv.FieldFromFQN("utf8.metadata.status_code", true),
+				semconv.FieldFromFQN("utf8.label.response_time", true),
 			}, nil),
 			input: arrowtest.Rows{
-				{"message": "request processed", "status_code": "200", "response_time": "150"},
-				{"message": "slow request", "status_code": "200", "response_time": "500"},
-				{"message": "error occurred", "status_code": "500", "response_time": "100"},
+				{"utf8.builtin.message": "request processed", "utf8.metadata.status_code": "200", "utf8.label.response_time": "150"},
+				{"utf8.builtin.message": "slow request", "utf8.metadata.status_code": "200", "utf8.label.response_time": "500"},
+				{"utf8.builtin.message": "error occurred", "utf8.metadata.status_code": "500", "utf8.label.response_time": "100"},
 			},
 			columnExprs: []physical.Expression{
 				&physical.UnaryExpr{
-					Op:   types.UnaryOpUnwrap,
+					Op:   types.UnaryOpCastFloat,
 					Left: &physical.ColumnExpr{Ref: createAmbiguousColumnRef("response_time")},
 				},
 			},
 			expectedFields: 4, // 4 columns: message, status_code, response_time, value
 			expectedOutput: arrowtest.Rows{
-				{"message": "request processed", "status_code": "200", "response_time": "150", types.ColumnNameGeneratedValue: 150.0},
-				{"message": "slow request", "status_code": "200", "response_time": "500", types.ColumnNameGeneratedValue: 500.0},
-				{"message": "error occurred", "status_code": "500", "response_time": "100", types.ColumnNameGeneratedValue: 100.0},
+				{"utf8.builtin.message": "request processed", "utf8.metadata.status_code": "200", "utf8.label.response_time": "150", "float64.generated.value": 150.0},
+				{"utf8.builtin.message": "slow request", "utf8.metadata.status_code": "200", "utf8.label.response_time": "500", "float64.generated.value": 500.0},
+				{"utf8.builtin.message": "error occurred", "utf8.metadata.status_code": "500", "utf8.label.response_time": "100", "float64.generated.value": 100.0},
 			},
 		},
 		{
-			name: "unwrap bytes value from label",
+			name: "cast bytes value from label",
 			schema: arrow.NewSchema([]arrow.Field{
-				{Name: types.ColumnNameBuiltinMessage, Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.String)},
-				{Name: "data_size", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeParsed, types.Loki.String)},
+				semconv.FieldFromIdent(semconv.ColumnIdentMessage, false),
+				semconv.FieldFromFQN("utf8.parsed.data_size", true),
 			}, nil),
 			input: arrowtest.Rows{
-				{"message": "data uploaded", "data_size": "1KiB"},
-				{"message": "large upload", "data_size": "5MiB"},
-				{"message": "small file", "data_size": "512B"},
+				{"utf8.builtin.message": "data uploaded", "utf8.parsed.data_size": "1KiB"},
+				{"utf8.builtin.message": "large upload", "utf8.parsed.data_size": "5MiB"},
+				{"utf8.builtin.message": "small file", "utf8.parsed.data_size": "512B"},
 			},
 			columnExprs: []physical.Expression{
 				&physical.UnaryExpr{
-					Op:   types.UnaryOpUnwrapBytes,
+					Op:   types.UnaryOpCastBytes,
 					Left: &physical.ColumnExpr{Ref: createAmbiguousColumnRef("data_size")},
 				},
 			},
 			expectedFields: 3, // 4 columns: message, data_size, value
 			expectedOutput: arrowtest.Rows{
-				{"message": "data uploaded", "data_size": "1KiB", types.ColumnNameGeneratedValue: 1024.0},
-				{"message": "large upload", "data_size": "5MiB", types.ColumnNameGeneratedValue: 5242880.0},
-				{"message": "small file", "data_size": "512B", types.ColumnNameGeneratedValue: 512.0},
+				{"utf8.builtin.message": "data uploaded", "utf8.parsed.data_size": "1KiB", "float64.generated.value": 1024.0},
+				{"utf8.builtin.message": "large upload", "utf8.parsed.data_size": "5MiB", "float64.generated.value": 5242880.0},
+				{"utf8.builtin.message": "small file", "utf8.parsed.data_size": "512B", "float64.generated.value": 512.0},
 			},
 		},
 		{
-			name: "unwrap duration value from label",
+			name: "cast duration value from parsed field",
 			schema: arrow.NewSchema([]arrow.Field{
-				{Name: types.ColumnNameBuiltinMessage, Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.String)},
-				{Name: "status_code", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeMetadata, types.Loki.String)},
-				{Name: "request_duration", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeParsed, types.Loki.String)},
+				semconv.FieldFromIdent(semconv.ColumnIdentMessage, false),
+				semconv.FieldFromFQN("utf8.metadata.status_code", true),
+				semconv.FieldFromFQN("utf8.parsed.request_duration", true),
 			}, nil),
 			input: arrowtest.Rows{
-				{"message": "request completed", "status_code": "200", "request_duration": "1.5s"},
-				{"message": "fast request", "status_code": "200", "request_duration": "250ms"},
-				{"message": "slow request", "status_code": "500", "request_duration": "30s"},
+				{"utf8.builtin.message": "request completed", "utf8.metadata.status_code": "200", "utf8.parsed.request_duration": "1.5s"},
+				{"utf8.builtin.message": "fast request", "utf8.metadata.status_code": "200", "utf8.parsed.request_duration": "250ms"},
+				{"utf8.builtin.message": "slow request", "utf8.metadata.status_code": "500", "utf8.parsed.request_duration": "30s"},
 			},
 			columnExprs: []physical.Expression{
 				&physical.UnaryExpr{
-					Op:   types.UnaryOpUnwrapDuration,
+					Op:   types.UnaryOpCastDuration,
 					Left: &physical.ColumnExpr{Ref: createAmbiguousColumnRef("request_duration")},
 				},
 			},
 			expectedFields: 4, // 4 columns: message, status_code, request_duration, value
 			expectedOutput: arrowtest.Rows{
-				{"message": "request completed", "status_code": "200", "request_duration": "1.5s", types.ColumnNameGeneratedValue: 1.5},
-				{"message": "fast request", "status_code": "200", "request_duration": "250ms", types.ColumnNameGeneratedValue: 0.25},
-				{"message": "slow request", "status_code": "500", "request_duration": "30s", types.ColumnNameGeneratedValue: 30.0},
+				{"utf8.builtin.message": "request completed", "utf8.metadata.status_code": "200", "utf8.parsed.request_duration": "1.5s", "float64.generated.value": 1.5},
+				{"utf8.builtin.message": "fast request", "utf8.metadata.status_code": "200", "utf8.parsed.request_duration": "250ms", "float64.generated.value": 0.25},
+				{"utf8.builtin.message": "slow request", "utf8.metadata.status_code": "500", "utf8.parsed.request_duration": "30s", "float64.generated.value": 30.0},
 			},
 		},
 		{
-			name: "unwrap duration_seconds value from label",
+			name: "cast duration_seconds value from label",
 			schema: arrow.NewSchema([]arrow.Field{
-				{Name: types.ColumnNameBuiltinMessage, Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.String)},
-				{Name: "status_code", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeMetadata, types.Loki.String)},
-				{Name: "timeout", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeParsed, types.Loki.String)},
+				semconv.FieldFromIdent(semconv.ColumnIdentMessage, false),
+				semconv.FieldFromFQN("utf8.metadata.status_code", true),
+				semconv.FieldFromFQN("utf8.parsed.timeout", true),
 			}, nil),
 			input: arrowtest.Rows{
-				{"message": "timeout set", "status_code": "200", "timeout": "2m"},
-				{"message": "short timeout", "status_code": "200", "timeout": "10s"},
-				{"message": "long timeout", "status_code": "200", "timeout": "1h"},
+				{"utf8.builtin.message": "timeout set", "utf8.metadata.status_code": "200", "utf8.parsed.timeout": "2m"},
+				{"utf8.builtin.message": "short timeout", "utf8.metadata.status_code": "200", "utf8.parsed.timeout": "10s"},
+				{"utf8.builtin.message": "long timeout", "utf8.metadata.status_code": "200", "utf8.parsed.timeout": "1h"},
 			},
 			columnExprs: []physical.Expression{
 				&physical.UnaryExpr{
-					Op:   types.UnaryOpUnwrapDuration,
+					Op:   types.UnaryOpCastDuration,
 					Left: &physical.ColumnExpr{Ref: createAmbiguousColumnRef("timeout")},
 				},
 			},
 			expectedFields: 4, // 4 columns: message, status_code, timeout, value
 			expectedOutput: arrowtest.Rows{
-				{"message": "timeout set", "status_code": "200", "timeout": "2m", types.ColumnNameGeneratedValue: 120.0},
-				{"message": "short timeout", "status_code": "200", "timeout": "10s", types.ColumnNameGeneratedValue: 10.0},
-				{"message": "long timeout", "status_code": "200", "timeout": "1h", types.ColumnNameGeneratedValue: 3600.0},
+				{"utf8.builtin.message": "timeout set", "utf8.metadata.status_code": "200", "utf8.parsed.timeout": "2m", "float64.generated.value": 120.0},
+				{"utf8.builtin.message": "short timeout", "utf8.metadata.status_code": "200", "utf8.parsed.timeout": "10s", "float64.generated.value": 10.0},
+				{"utf8.builtin.message": "long timeout", "utf8.metadata.status_code": "200", "utf8.parsed.timeout": "1h", "float64.generated.value": 3600.0},
 			},
 		},
 		{
 			name: "mixed valid and invalid values with null handling",
 			schema: arrow.NewSchema([]arrow.Field{
-				{Name: types.ColumnNameBuiltinMessage, Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.String)},
-				{Name: "mixed_values", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeParsed, types.Loki.String)},
+				semconv.FieldFromIdent(semconv.ColumnIdentMessage, false),
+				semconv.FieldFromFQN("utf8.parsed.mixed_values", true),
 			}, nil),
 			input: arrowtest.Rows{
-				{"message": "valid numeric", "mixed_values": "42.5"},
-				{"message": "invalid numeric", "mixed_values": "not_a_number"},
-				{"message": "valid bytes", "mixed_values": "1KB"},
-				{"message": "invalid bytes", "mixed_values": "invalid_bytes"},
-				{"message": "empty string", "mixed_values": ""},
+				{"utf8.builtin.message": "valid numeric", "utf8.parsed.mixed_values": "42.5"},
+				{"utf8.builtin.message": "invalid numeric", "utf8.parsed.mixed_values": "not_a_number"},
+				{"utf8.builtin.message": "valid bytes", "utf8.parsed.mixed_values": "1KB"},
+				{"utf8.builtin.message": "invalid bytes", "utf8.parsed.mixed_values": "invalid_bytes"},
+				{"utf8.builtin.message": "empty string", "utf8.parsed.mixed_values": ""},
 			},
 			columnExprs: []physical.Expression{
 				&physical.UnaryExpr{
-					Op:   types.UnaryOpUnwrap,
+					Op:   types.UnaryOpCastFloat,
 					Left: &physical.ColumnExpr{Ref: createAmbiguousColumnRef("mixed_values")},
 				},
 			},
 			expectedFields: 5,
 			expectedOutput: arrowtest.Rows{
-				{"message": "valid numeric", "mixed_values": "42.5",
-					types.ColumnNameGeneratedValue: 42.5,
-					types.ColumnNameError:          nil,
-					types.ColumnNameErrorDetails:   nil},
-				{"message": "invalid numeric", "mixed_values": "not_a_number",
-					types.ColumnNameGeneratedValue: 0.0,
-					types.ColumnNameError:          types.SampleExtractionErrorType,
-					types.ColumnNameErrorDetails:   `strconv.ParseFloat: parsing "not_a_number": invalid syntax`}, //invalid
-				{"message": "valid bytes", "mixed_values": "1KB",
-					types.ColumnNameGeneratedValue: 0.0,
-					types.ColumnNameError:          types.SampleExtractionErrorType,
-					types.ColumnNameErrorDetails:   `strconv.ParseFloat: parsing "1KB": invalid syntax`}, // 1KB is not a valid float but doesn't error
-				{"message": "invalid bytes", "mixed_values": "invalid_bytes",
-					types.ColumnNameGeneratedValue: 0.0,
-					types.ColumnNameError:          types.SampleExtractionErrorType,
-					types.ColumnNameErrorDetails:   `strconv.ParseFloat: parsing "invalid_bytes": invalid syntax`}, // invalid but doesn't error
-				{"message": "empty string", "mixed_values": "",
-					types.ColumnNameGeneratedValue: 0.0,
-					types.ColumnNameError:          types.SampleExtractionErrorType,
-					types.ColumnNameErrorDetails:   `strconv.ParseFloat: parsing "": invalid syntax`}, // empty string gets error from previous parsing
+				{"utf8.builtin.message": "valid numeric", "utf8.parsed.mixed_values": "42.5",
+					"float64.generated.value":          42.5,
+					"utf8.generated.__error__":         nil,
+					"utf8.generated.__error_details__": nil},
+				{"utf8.builtin.message": "invalid numeric", "utf8.parsed.mixed_values": "not_a_number",
+					"float64.generated.value":          0.0,
+					"utf8.generated.__error__":         types.SampleExtractionErrorType,
+					"utf8.generated.__error_details__": `strconv.ParseFloat: parsing "not_a_number": invalid syntax`}, //invalid
+				{"utf8.builtin.message": "valid bytes", "utf8.parsed.mixed_values": "1KB",
+					"float64.generated.value":          0.0,
+					"utf8.generated.__error__":         types.SampleExtractionErrorType,
+					"utf8.generated.__error_details__": `strconv.ParseFloat: parsing "1KB": invalid syntax`}, // 1KB is not a valid float but doesn't error
+				{"utf8.builtin.message": "invalid bytes", "utf8.parsed.mixed_values": "invalid_bytes",
+					"float64.generated.value":          0.0,
+					"utf8.generated.__error__":         types.SampleExtractionErrorType,
+					"utf8.generated.__error_details__": `strconv.ParseFloat: parsing "invalid_bytes": invalid syntax`}, // invalid but doesn't error
+				{"utf8.builtin.message": "empty string", "utf8.parsed.mixed_values": "",
+					"float64.generated.value":          0.0,
+					"utf8.generated.__error__":         types.SampleExtractionErrorType,
+					"utf8.generated.__error_details__": `strconv.ParseFloat: parsing "": invalid syntax`}, // empty string gets error from previous parsing
 			},
 		},
 		{
 			name: "edge cases for numeric parsing",
 			schema: arrow.NewSchema([]arrow.Field{
-				{Name: types.ColumnNameBuiltinMessage, Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.String)},
-				{Name: "edge_values", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeParsed, types.Loki.String)},
+				semconv.FieldFromIdent(semconv.ColumnIdentMessage, false),
+				semconv.FieldFromFQN("utf8.parsed.edge_values", true),
 			}, nil),
 			input: arrowtest.Rows{
-				{"message": "scientific notation", "edge_values": "1.23e+02"},
-				{"message": "negative number", "edge_values": "-456.78"},
-				{"message": "only whitespace", "edge_values": "   "},
-				{"message": "mixed text and numbers", "edge_values": "123abc"},
+				{"utf8.builtin.message": "scientific notation", "utf8.parsed.edge_values": "1.23e+02"},
+				{"utf8.builtin.message": "negative number", "utf8.parsed.edge_values": "-456.78"},
+				{"utf8.builtin.message": "only whitespace", "utf8.parsed.edge_values": "   "},
+				{"utf8.builtin.message": "mixed text and numbers", "utf8.parsed.edge_values": "123abc"},
 			},
 			columnExprs: []physical.Expression{
 				&physical.UnaryExpr{
-					Op:   types.UnaryOpUnwrap,
+					Op:   types.UnaryOpCastFloat,
 					Left: &physical.ColumnExpr{Ref: createAmbiguousColumnRef("edge_values")},
 				},
 			},
 			expectedFields: 5,
 			expectedOutput: arrowtest.Rows{
-				{"message": "scientific notation",
-					"edge_values":                  "1.23e+02",
-					types.ColumnNameGeneratedValue: 123.0,
-					types.ColumnNameError:          nil,
-					types.ColumnNameErrorDetails:   nil}, // empty string gets error from previous parsing
-				{"message": "negative number",
-					"edge_values":                  "-456.78",
-					types.ColumnNameGeneratedValue: -456.78,
-					types.ColumnNameError:          nil,
-					types.ColumnNameErrorDetails:   nil}, // empty string gets error from previous parsing
-				{"message": "only whitespace", "edge_values": "   ",
-					types.ColumnNameGeneratedValue: 0.0,
-					types.ColumnNameError:          types.SampleExtractionErrorType,
-					types.ColumnNameErrorDetails:   `strconv.ParseFloat: parsing "   ": invalid syntax`}, // empty string gets error from previous parsing
-				{"message": "mixed text and numbers",
-					"edge_values":                  "123abc",
-					types.ColumnNameGeneratedValue: 0.0,
-					types.ColumnNameError:          types.SampleExtractionErrorType,
-					types.ColumnNameErrorDetails:   `strconv.ParseFloat: parsing "123abc": invalid syntax`}, // empty string gets error from previous parsing
+				{"utf8.builtin.message": "scientific notation",
+					"utf8.parsed.edge_values":          "1.23e+02",
+					"float64.generated.value":          123.0,
+					"utf8.generated.__error__":         nil,
+					"utf8.generated.__error_details__": nil}, // empty string gets error from previous parsing
+				{"utf8.builtin.message": "negative number",
+					"utf8.parsed.edge_values":          "-456.78",
+					"float64.generated.value":          -456.78,
+					"utf8.generated.__error__":         nil,
+					"utf8.generated.__error_details__": nil}, // empty string gets error from previous parsing
+				{"utf8.builtin.message": "only whitespace", "utf8.parsed.edge_values": "   ",
+					"float64.generated.value":          0.0,
+					"utf8.generated.__error__":         types.SampleExtractionErrorType,
+					"utf8.generated.__error_details__": `strconv.ParseFloat: parsing "   ": invalid syntax`}, // empty string gets error from previous parsing
+				{"utf8.builtin.message": "mixed text and numbers",
+					"utf8.parsed.edge_values":          "123abc",
+					"float64.generated.value":          0.0,
+					"utf8.generated.__error__":         types.SampleExtractionErrorType,
+					"utf8.generated.__error_details__": `strconv.ParseFloat: parsing "123abc": invalid syntax`}, // empty string gets error from previous parsing
 			},
 		},
 		{
 			name: "negative durations and edge cases",
 			schema: arrow.NewSchema([]arrow.Field{
-				{Name: types.ColumnNameBuiltinMessage, Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.String)},
-				{Name: "duration_values", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeParsed, types.Loki.String)},
+				semconv.FieldFromIdent(semconv.ColumnIdentMessage, false),
+				semconv.FieldFromFQN("utf8.parsed.duration_values", true),
 			}, nil),
 			input: arrowtest.Rows{
-				{"message": "negative duration", "duration_values": "-5s"},
-				{"message": "zero duration", "duration_values": "0s"},
-				{"message": "fractional duration", "duration_values": "1.5s"},
-				{"message": "invalid duration", "duration_values": "5 seconds"}, // space makes it invalid
+				{"utf8.builtin.message": "negative duration", "utf8.parsed.duration_values": "-5s"},
+				{"utf8.builtin.message": "zero duration", "utf8.parsed.duration_values": "0s"},
+				{"utf8.builtin.message": "fractional duration", "utf8.parsed.duration_values": "1.5s"},
+				{"utf8.builtin.message": "invalid duration", "utf8.parsed.duration_values": "5 seconds"}, // space makes it invalid
 			},
 			columnExprs: []physical.Expression{
 				&physical.UnaryExpr{
-					Op:   types.UnaryOpUnwrapDuration,
+					Op:   types.UnaryOpCastDuration,
 					Left: &physical.ColumnExpr{Ref: createAmbiguousColumnRef("duration_values")},
 				},
 			},
 			expectedFields: 5,
 			expectedOutput: arrowtest.Rows{
-				{"message": "negative duration",
-					"duration_values":              "-5s",
-					types.ColumnNameGeneratedValue: -5.0,
-					types.ColumnNameError:          nil,
-					types.ColumnNameErrorDetails:   nil},
-				{"message": "zero duration",
-					"duration_values":              "0s",
-					types.ColumnNameGeneratedValue: 0.0,
-					types.ColumnNameError:          nil,
-					types.ColumnNameErrorDetails:   nil},
-				{"message": "fractional duration",
-					"duration_values":              "1.5s",
-					types.ColumnNameGeneratedValue: 1.5,
-					types.ColumnNameError:          nil,
-					types.ColumnNameErrorDetails:   nil},
-				{"message": "invalid duration",
-					"duration_values":              "5 seconds",
-					types.ColumnNameGeneratedValue: 0.0,
-					types.ColumnNameError:          types.SampleExtractionErrorType,
-					types.ColumnNameErrorDetails:   `time: unknown unit " seconds" in duration "5 seconds"`}, // empty string gets error from previous parsing
+				{"utf8.builtin.message": "negative duration",
+					"utf8.parsed.duration_values":      "-5s",
+					"float64.generated.value":          -5.0,
+					"utf8.generated.__error__":         nil,
+					"utf8.generated.__error_details__": nil},
+				{"utf8.builtin.message": "zero duration",
+					"utf8.parsed.duration_values":      "0s",
+					"float64.generated.value":          0.0,
+					"utf8.generated.__error__":         nil,
+					"utf8.generated.__error_details__": nil},
+				{"utf8.builtin.message": "fractional duration",
+					"utf8.parsed.duration_values":      "1.5s",
+					"float64.generated.value":          1.5,
+					"utf8.generated.__error__":         nil,
+					"utf8.generated.__error_details__": nil},
+				{"utf8.builtin.message": "invalid duration",
+					"utf8.parsed.duration_values":      "5 seconds",
+					"float64.generated.value":          0.0,
+					"utf8.generated.__error__":         types.SampleExtractionErrorType,
+					"utf8.generated.__error_details__": `time: unknown unit " seconds" in duration "5 seconds"`}, // empty string gets error from previous parsing
 			},
 		},
 	} {

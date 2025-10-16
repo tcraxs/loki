@@ -12,7 +12,7 @@ import (
 )
 
 func NewProjectPipeline(input Pipeline, projection *physical.Projection, evaluator *expressionEvaluator) (*GenericPipeline, error) {
-	return newGenericPipeline(Local, func(ctx context.Context, inputs []Pipeline) state {
+	return newGenericPipeline(func(ctx context.Context, inputs []Pipeline) (arrow.Record, error) {
 		// Pull the next item from the input pipeline
 		input := inputs[0]
 		batch, err := input.Read(ctx)
@@ -22,10 +22,11 @@ func NewProjectPipeline(input Pipeline, projection *physical.Projection, evaluat
 		defer batch.Release()
 
 		columns := projection.Expressions
-		// short circuit if there are no columns to project, treat as a select *
+
+		// short circuit if there are no columns to project
 		if len(columns) == 0 {
-			projectedRecord := array.NewRecord(batch.Schema(), batch.Columns(), batch.NumRows())
-			return projectedRecord, nil
+			batch.Retain()
+			return batch, nil
 		}
 
 		columnOrder := []string{}
@@ -45,15 +46,14 @@ func NewProjectPipeline(input Pipeline, projection *physical.Projection, evaluat
 				columnName := ident.FQN()
 				columnOrder = append(columnOrder, columnName)
 				fields[columnName] = semconv.FieldFromIdent(ident, true)
+
 				arr := vec.ToArray()
-				defer arr.Release()
 				projected[columnName] = arr
-			case *physical.UnwrapExpr:
+			case *physical.UnaryExpr:
 				if arrStruct, ok := vec.ToArray().(*array.Struct); ok {
 					defer arrStruct.Release()
 					for i := range arrStruct.NumField() {
 						arr := arrStruct.Field(i)
-						defer arr.Release()
 
 						structSchema, ok := arrStruct.DataType().(*arrow.StructType)
 						if !ok {
@@ -61,13 +61,13 @@ func NewProjectPipeline(input Pipeline, projection *physical.Projection, evaluat
 						}
 						field := structSchema.Field(i)
 
-						if _, ok := fields[field.Name()]; ok {
+						if _, ok := fields[field.Name]; ok {
 							continue
 						}
 
-						columnOrder = append(columnOrder, field.Name())
-						fields[field.Name()] = field
-						projected[field.Name()] = arr
+						columnOrder = append(columnOrder, field.Name)
+						fields[field.Name] = field
+						projected[field.Name] = arr
 					}
 				}
 			default:
@@ -81,9 +81,10 @@ func NewProjectPipeline(input Pipeline, projection *physical.Projection, evaluat
 		if projection.Expand {
 			schema := batch.Schema()
 			for i, field := range schema.Fields() {
-				columnOrder = append(columnOrder, field.Name())
-				fields[field.Name()] = field
-				projected[field.Name()] = batch.Column(i)
+				col := batch.Column(i)
+				columnOrder = append(columnOrder, field.Name)
+				fields[field.Name] = field
+				projected[field.Name] = col
 			}
 		}
 

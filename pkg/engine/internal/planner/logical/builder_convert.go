@@ -47,8 +47,6 @@ func (b *ssaBuilder) process(value Value) (Value, error) {
 		return b.processVectorAggregation(value)
 	case *Parse:
 		return b.processParsePlan(value)
-	case *UnwrapValue:
-		return b.processUnwrapPlan(value)
 	case *UnaryOp:
 		return b.processUnaryOp(value)
 	case *BinOp:
@@ -57,9 +55,10 @@ func (b *ssaBuilder) process(value Value) (Value, error) {
 		return b.processColumnRef(value)
 	case *Literal:
 		return b.processLiteral(value)
-
 	case *LogQLCompat:
 		return b.processCompat(value)
+	case *Projection:
+		return b.processProjection(value)
 
 	default:
 		return nil, fmt.Errorf("unsupported value type %T", value)
@@ -153,19 +152,6 @@ func (b *ssaBuilder) processParsePlan(plan *Parse) (Value, error) {
 	return plan, nil
 }
 
-func (b *ssaBuilder) processUnwrapPlan(plan *UnwrapValue) (Value, error) {
-	if _, err := b.process(plan.Table); err != nil {
-		return nil, err
-	}
-
-	// Only append the first time we see this.
-	if plan.id == "" {
-		plan.id = fmt.Sprintf("%%%d", b.getID())
-		b.instructions = append(b.instructions, plan)
-	}
-	return plan, nil
-}
-
 func (b *ssaBuilder) processUnaryOp(value *UnaryOp) (Value, error) {
 	if _, err := b.process(value.Value); err != nil {
 		return nil, err
@@ -218,6 +204,19 @@ func (b *ssaBuilder) processBinOp(expr *BinOp) (Value, error) {
 		b.instructions = append(b.instructions, expr)
 	}
 	return expr, nil
+}
+
+func (b *ssaBuilder) processProjection(value *Projection) (Value, error) {
+	if _, err := b.process(value.Table); err != nil {
+		return nil, err
+	}
+
+	// Only append the first time we see this.
+	if value.id == "" {
+		value.id = fmt.Sprintf("%%%d", b.getID())
+		b.instructions = append(b.instructions, value)
+	}
+	return value, nil
 }
 
 func (b *ssaBuilder) processColumnRef(value *ColumnRef) (Value, error) {

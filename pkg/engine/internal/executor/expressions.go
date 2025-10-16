@@ -134,7 +134,7 @@ func (e expressionEvaluator) eval(expr physical.Expression, input arrow.Record) 
 		if err != nil {
 			return nil, fmt.Errorf("failed to lookup unary function: %w", err)
 		}
-		return fn.Evaluate(lhr)
+		return fn.Evaluate(lhr, e.allocator)
 
 	case *physical.BinaryExpr:
 		lhs, err := e.eval(expr.Left, input)
@@ -339,6 +339,7 @@ func NewArrayStruct(arr *array.Struct, ct types.ColumnType) *ArrayStruct {
 // ToArray implements ColumnVector.
 // Returns the underlying struct array.
 func (a *ArrayStruct) ToArray() arrow.Array {
+	a.array.Retain()
 	return a.array
 }
 
@@ -400,6 +401,11 @@ func (a *ArrayStruct) ColumnType() types.ColumnType {
 // Len implements ColumnVector.
 func (a *ArrayStruct) Len() int64 {
 	return a.rows
+}
+
+// Release decreases the reference count by 1 on underlying Arrow array
+func (a *ArrayStruct) Release() {
+	a.array.Release()
 }
 
 // CoalesceVector represents multiple columns with the same name but different [types.ColumnType]

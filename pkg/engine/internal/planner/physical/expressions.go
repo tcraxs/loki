@@ -16,7 +16,6 @@ const (
 	ExprTypeBinary
 	ExprTypeLiteral
 	ExprTypeColumn
-	ExprTypeUnwrap
 )
 
 // String returns the string representation of the [ExpressionType].
@@ -30,8 +29,6 @@ func (t ExpressionType) String() string {
 		return "LiteralExpression"
 	case ExprTypeColumn:
 		return "ColumnExpression"
-	case ExprTypeUnwrap:
-		return "UnwrapExpression"
 	default:
 		panic(fmt.Sprintf("unknown expression type %d", t))
 	}

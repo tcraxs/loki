@@ -5,6 +5,7 @@ import (
 
 	"github.com/grafana/loki/v3/pkg/engine/internal/planner/schema"
 	"github.com/grafana/loki/v3/pkg/engine/internal/types"
+	"github.com/grafana/loki/v3/pkg/logql/syntax"
 )
 
 // Builder provides an ergonomic interface for constructing a [Plan].
@@ -49,13 +50,33 @@ func (b *Builder) Parse(kind ParserKind) *Builder {
 	}
 }
 
-// Unwrap applies an [UnwrapValue] operation to the Builder.
+// Unwrap applies an [Projection] operation, with an [UnaryOp] unwrap operation, to the Builder.
 func (b *Builder) Unwrap(identifier string, operation string) *Builder {
+	var op types.UnaryOp
+	switch operation {
+	case syntax.OpConvBytes:
+		op = types.UnaryOpCastBytes
+	case syntax.OpConvDuration, syntax.OpConvDurationSeconds:
+		op = types.UnaryOpCastDuration
+	default:
+		op = types.UnaryOpCastFloat
+	}
+
 	return &Builder{
-		val: &UnwrapValue{
-			Table:           b.val,
-			Identifier:      identifier,
-			UnwrapOperation: parseUnwrapOp(operation),
+		val: &Projection{
+			Table: b.val,
+			Expressions: []Value{
+				&UnaryOp{
+					Op: op,
+					Value: &ColumnRef{
+						Ref: types.ColumnRef{
+							Column: identifier,
+							Type:   types.ColumnTypeAmbiguous,
+						},
+					},
+				},
+			},
+			Expand: true,
 		},
 	}
 }

@@ -31,7 +31,7 @@ func (u *UnaryOp) Name() string {
 
 // String returns the disassembled SSA form of the UnaryOp instruction.
 func (u *UnaryOp) String() string {
-	return fmt.Sprintf("%s %s", u.Op, u.Value.Name())
+	return fmt.Sprintf("%s(%s)", u.Op, u.Value.Name())
 }
 
 // Schema returns the schema of the UnaryOp plan.

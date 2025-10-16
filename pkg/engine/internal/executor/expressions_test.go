@@ -397,7 +397,12 @@ label_2
 	})
 }
 
-func TestEvaluateUnwrapExpression(t *testing.T) {
+func TestEvaluateUnaryCastExpression(t *testing.T) {
+	colMsg := semconv.ColumnIdentMessage
+	colStatusCode := semconv.NewIdentifier("status_code", types.ColumnTypeMetadata, types.Loki.String)
+	colTimeout := semconv.NewIdentifier("timeout", types.ColumnTypeParsed, types.Loki.String)
+	colMixedValues := semconv.NewIdentifier("mixed_values", types.ColumnTypeMetadata, types.Loki.String)
+
 	t.Run("unknown column", func(t *testing.T) {
 		alloc := memory.NewCheckedAllocator(memory.DefaultAllocator)
 		defer alloc.AssertSize(t, 0) // Assert empty on test exit
@@ -409,13 +414,14 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 					Type:   types.ColumnTypeAmbiguous,
 				},
 			},
-			Op: types.UnaryOpUnwrap,
+			Op: types.UnaryOpCastFloat,
 		}
 
 		n := len(words)
 		rec := batch(n, time.Now())
 		colVec, err := e.eval(expr, rec)
 		require.NoError(t, err)
+		defer colVec.Release()
 
 		id := colVec.Type().ArrowType().ID()
 		require.Equal(t, arrow.STRUCT, id)
@@ -442,7 +448,7 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 		}
 	})
 
-	t.Run("unwrap column generates a value", func(t *testing.T) {
+	t.Run("cast column generates a value", func(t *testing.T) {
 		expr := &physical.UnaryExpr{
 			Left: &physical.ColumnExpr{
 				Ref: types.ColumnRef{
@@ -450,22 +456,25 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 					Type:   types.ColumnTypeAmbiguous,
 				},
 			},
-			Op: types.UnaryOpUnwrap,
+			Op: types.UnaryOpCastBytes,
 		}
 
 		alloc := memory.NewCheckedAllocator(memory.DefaultAllocator)
 		defer alloc.AssertSize(t, 0) // Assert empty on test exit
 		e := newExpressionEvaluator(alloc)
 
-		schema := arrow.NewSchema([]arrow.Field{
-			{Name: types.ColumnNameBuiltinMessage, Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.String)},
-			{Name: "status_code", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeMetadata, types.Loki.String)},
-			{Name: "timeout", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeParsed, types.Loki.String)},
-		}, nil)
+		schema := arrow.NewSchema(
+			[]arrow.Field{
+				semconv.FieldFromIdent(colMsg, false),
+				semconv.FieldFromIdent(colStatusCode, true),
+				semconv.FieldFromIdent(colTimeout, true),
+			},
+			nil,
+		)
 		rows := arrowtest.Rows{
-			{"message": "timeout set", "status_code": "200", "timeout": "2m"},
-			{"message": "short timeout", "status_code": "204", "timeout": "10s"},
-			{"message": "long timeout", "status_code": "404", "timeout": "1h"},
+			{"utf8.builtin.message": "timeout set", "utf8.metadata.status_code": "200", "utf8.parsed.timeout": "2m"},
+			{"utf8.builtin.message": "short timeout", "utf8.metadata.status_code": "204", "utf8.parsed.timeout": "10s"},
+			{"utf8.builtin.message": "long timeout", "utf8.metadata.status_code": "404", "utf8.parsed.timeout": "1h"},
 		}
 
 		record := rows.Record(alloc, schema)
@@ -473,6 +482,7 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 
 		colVec, err := e.eval(expr, record)
 		require.NoError(t, err)
+		defer colVec.Release()
 		id := colVec.Type().ArrowType().ID()
 		require.Equal(t, arrow.STRUCT, id)
 
@@ -490,7 +500,7 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 		require.Equal(t, 404.0, value.Value(2))
 	})
 
-	t.Run("unwrap column generates a value from a parsed column", func(t *testing.T) {
+	t.Run("cast column generates a value from a parsed column", func(t *testing.T) {
 		expr := &physical.UnaryExpr{
 			Left: &physical.ColumnExpr{
 				Ref: types.ColumnRef{
@@ -498,22 +508,25 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 					Type:   types.ColumnTypeAmbiguous,
 				},
 			},
-			Op: types.UnaryOpUnwrapDuration,
+			Op: types.UnaryOpCastDuration,
 		}
 
 		alloc := memory.NewCheckedAllocator(memory.DefaultAllocator)
 		defer alloc.AssertSize(t, 0) // Assert empty on test exit
 		e := newExpressionEvaluator(alloc)
 
-		schema := arrow.NewSchema([]arrow.Field{
-			{Name: types.ColumnNameBuiltinMessage, Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.String)},
-			{Name: "status_code", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeMetadata, types.Loki.String)},
-			{Name: "timeout", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeParsed, types.Loki.String)},
-		}, nil)
+		schema := arrow.NewSchema(
+			[]arrow.Field{
+				semconv.FieldFromIdent(colMsg, false),
+				semconv.FieldFromIdent(colStatusCode, true),
+				semconv.FieldFromIdent(colTimeout, true),
+			},
+			nil,
+		)
 		rows := arrowtest.Rows{
-			{"message": "timeout set", "status_code": "200", "timeout": "2m"},
-			{"message": "short timeout", "status_code": "204", "timeout": "10s"},
-			{"message": "long timeout", "status_code": "404", "timeout": "1h"},
+			{"utf8.builtin.message": "timeout set", "utf8.metadata.status_code": "200", "utf8.parsed.timeout": "2m"},
+			{"utf8.builtin.message": "short timeout", "utf8.metadata.status_code": "204", "utf8.parsed.timeout": "10s"},
+			{"utf8.builtin.message": "long timeout", "utf8.metadata.status_code": "404", "utf8.parsed.timeout": "1h"},
 		}
 
 		record := rows.Record(alloc, schema)
@@ -521,6 +534,7 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 
 		colVec, err := e.eval(expr, record)
 		require.NoError(t, err)
+		defer colVec.Release()
 		id := colVec.Type().ArrowType().ID()
 		require.Equal(t, arrow.STRUCT, id)
 
@@ -537,7 +551,7 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 		require.Equal(t, 3600.0, value.Value(2))
 	})
 
-	t.Run("unwrap tracks errors", func(t *testing.T) {
+	t.Run("cast operation tracks errors", func(t *testing.T) {
 		colExpr := &physical.UnaryExpr{
 			Left: &physical.ColumnExpr{
 				Ref: types.ColumnRef{
@@ -545,23 +559,26 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 					Type:   types.ColumnTypeAmbiguous,
 				},
 			},
-			Op: types.UnaryOpUnwrap,
+			Op: types.UnaryOpCastFloat,
 		}
 
 		alloc := memory.NewCheckedAllocator(memory.DefaultAllocator)
 		defer alloc.AssertSize(t, 0) // Assert empty on test exit
 		e := newExpressionEvaluator(alloc)
 
-		schema := arrow.NewSchema([]arrow.Field{
-			{Name: types.ColumnNameBuiltinMessage, Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeBuiltin, types.Loki.String)},
-			{Name: "mixed_values", Type: arrow.BinaryTypes.String, Metadata: types.ColumnMetadata(types.ColumnTypeMetadata, types.Loki.String)},
-		}, nil)
+		schema := arrow.NewSchema(
+			[]arrow.Field{
+				semconv.FieldFromIdent(colMsg, false),
+				semconv.FieldFromIdent(colMixedValues, true),
+			},
+			nil,
+		)
 		rows := arrowtest.Rows{
-			{"message": "valid numeric", "mixed_values": "42.5"},
-			{"message": "invalid numeric", "mixed_values": "not_a_number"},
-			{"message": "valid bytes", "mixed_values": "1KB"},
-			{"message": "invalid bytes", "mixed_values": "invalid_bytes"},
-			{"message": "empty string", "mixed_values": ""},
+			{"utf8.builtin.message": "valid numeric", "utf8.metadata.mixed_values": "42.5"},
+			{"utf8.builtin.message": "invalid numeric", "utf8.metadata.mixed_values": "not_a_number"},
+			{"utf8.builtin.message": "valid bytes", "utf8.metadata.mixed_values": "1KB"},
+			{"utf8.builtin.message": "invalid bytes", "utf8.metadata.mixed_values": "invalid_bytes"},
+			{"utf8.builtin.message": "empty string", "utf8.metadata.mixed_values": ""},
 		}
 
 		record := rows.Record(alloc, schema)
@@ -569,6 +586,7 @@ func TestEvaluateUnwrapExpression(t *testing.T) {
 
 		colVec, err := e.eval(colExpr, record)
 		require.NoError(t, err)
+		defer colVec.Release()
 		id := colVec.Type().ArrowType().ID()
 		require.Equal(t, arrow.STRUCT, id)
 
