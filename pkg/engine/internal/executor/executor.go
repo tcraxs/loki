@@ -340,7 +340,7 @@ func (c *Context) executeMerge(ctx context.Context, _ *physical.Merge, inputs []
 
 func (c *Context) executeProjection(ctx context.Context, proj *physical.Projection, inputs []Pipeline) Pipeline {
 	ctx, span := tracer.Start(ctx, "Context.executeProjection", trace.WithAttributes(
-		attribute.Int("num_columns", len(proj.Columns)),
+		attribute.Int("num_expressions", len(proj.Expressions)),
 		attribute.Int("num_inputs", len(inputs)),
 	))
 	defer span.End()
@@ -354,11 +354,11 @@ func (c *Context) executeProjection(ctx context.Context, proj *physical.Projecti
 		return errorPipeline(ctx, fmt.Errorf("projection expects exactly one input, got %d", len(inputs)))
 	}
 
-	if len(proj.Columns) == 0 {
+	if len(proj.Expressions) == 0 {
 		return errorPipeline(ctx, fmt.Errorf("projection expects at least one column, got 0"))
 	}
 
-	p, err := NewProjectPipeline(inputs[0], proj.Columns, &c.evaluator)
+	p, err := NewProjectPipeline(inputs[0], proj, &c.evaluator)
 	if err != nil {
 		return errorPipeline(ctx, err)
 	}

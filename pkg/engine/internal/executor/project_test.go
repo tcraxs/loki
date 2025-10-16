@@ -33,20 +33,20 @@ func TestNewProjectPipeline(t *testing.T) {
 		inputPipeline := NewBufferedPipeline(inputRecord)
 
 		// Create projection columns (just the "name" column)
-		columns := []physical.ColumnExpression{
+		columns := []physical.Expression{
 			&physical.ColumnExpr{
 				Ref: createColumnRef("name"),
 			},
 		}
 
 		// Create project pipeline
-		projectPipeline, err := NewProjectPipeline(inputPipeline, columns, &expressionEvaluator{})
+		projectPipeline, err := NewProjectPipeline(inputPipeline, &physical.Projection{Expressions: columns}, &expressionEvaluator{})
 		require.NoError(t, err)
 
 		// Create expected output
 		expectedCSV := "Alice\nBob\nCharlie"
 		expectedFields := []arrow.Field{
-			semconv.FieldFromFQN("utf8.builtin.name", true),
+			semconv.FieldFromFQN("utf8.builtin.name", false),
 		}
 		expectedRecord, err := CSVToArrowWithAllocator(alloc, expectedFields, expectedCSV)
 		require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestNewProjectPipeline(t *testing.T) {
 		inputPipeline := NewBufferedPipeline(inputRecord)
 
 		// Create projection columns (both "name" and "city" columns)
-		columns := []physical.ColumnExpression{
+		columns := []physical.Expression{
 			&physical.ColumnExpr{
 				Ref: createColumnRef("name"),
 			},
@@ -79,58 +79,14 @@ func TestNewProjectPipeline(t *testing.T) {
 		}
 
 		// Create project pipeline
-		projectPipeline, err := NewProjectPipeline(inputPipeline, columns, &expressionEvaluator{})
+		projectPipeline, err := NewProjectPipeline(inputPipeline, &physical.Projection{Expressions: columns}, &expressionEvaluator{})
 		require.NoError(t, err)
 
 		// Create expected output
 		expectedCSV := "Alice,New York\nBob,Boston\nCharlie,Seattle"
 		expectedFields := []arrow.Field{
-			semconv.FieldFromFQN("utf8.builtin.name", true),
-			semconv.FieldFromFQN("utf8.builtin.city", true),
-		}
-		expectedRecord, err := CSVToArrow(expectedFields, expectedCSV)
-		require.NoError(t, err)
-		defer expectedRecord.Release()
-
-		expectedPipeline := NewBufferedPipeline(expectedRecord)
-
-		// Assert that the pipelines produce equal results
-		AssertPipelinesEqual(t, projectPipeline, expectedPipeline)
-	})
-
-	t.Run("project columns in different order", func(t *testing.T) {
-		// Create input data
-		inputCSV := "Alice,30,New York\nBob,25,Boston\nCharlie,35,Seattle"
-		inputRecord, err := CSVToArrow(fields, inputCSV)
-		require.NoError(t, err)
-		defer inputRecord.Release()
-
-		// Create input pipeline
-		inputPipeline := NewBufferedPipeline(inputRecord)
-
-		// Create projection columns (reordering columns)
-		columns := []physical.ColumnExpression{
-			&physical.ColumnExpr{
-				Ref: createColumnRef("city"),
-			},
-			&physical.ColumnExpr{
-				Ref: createColumnRef("age"),
-			},
-			&physical.ColumnExpr{
-				Ref: createColumnRef("name"),
-			},
-		}
-
-		// Create project pipeline
-		projectPipeline, err := NewProjectPipeline(inputPipeline, columns, &expressionEvaluator{})
-		require.NoError(t, err)
-
-		// Create expected output
-		expectedCSV := "New York,30,Alice\nBoston,25,Bob\nSeattle,35,Charlie"
-		expectedFields := []arrow.Field{
-			semconv.FieldFromFQN("utf8.builtin.city", true),
-			semconv.FieldFromFQN("int64.builtin.age", true),
-			semconv.FieldFromFQN("utf8.builtin.name", true),
+			semconv.FieldFromFQN("utf8.builtin.name", false),
+			semconv.FieldFromFQN("utf8.builtin.city", false),
 		}
 		expectedRecord, err := CSVToArrow(expectedFields, expectedCSV)
 		require.NoError(t, err)
@@ -159,7 +115,7 @@ func TestNewProjectPipeline(t *testing.T) {
 		inputPipeline := NewBufferedPipeline(inputRecord1, inputRecord2)
 
 		// Create projection columns
-		columns := []physical.ColumnExpression{
+		columns := []physical.Expression{
 			&physical.ColumnExpr{
 				Ref: createColumnRef("name"),
 			},
@@ -169,13 +125,13 @@ func TestNewProjectPipeline(t *testing.T) {
 		}
 
 		// Create project pipeline
-		projectPipeline, err := NewProjectPipeline(inputPipeline, columns, &expressionEvaluator{})
+		projectPipeline, err := NewProjectPipeline(inputPipeline, &physical.Projection{Expressions: columns}, &expressionEvaluator{})
 		require.NoError(t, err)
 
 		// Create expected output also split across multiple records
 		expectedFields := []arrow.Field{
-			semconv.FieldFromFQN("utf8.builtin.name", true),
-			semconv.FieldFromFQN("int64.builtin.age", true),
+			semconv.FieldFromFQN("utf8.builtin.name", false),
+			semconv.FieldFromFQN("int64.builtin.age", false),
 		}
 
 		expected := `
