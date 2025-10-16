@@ -34,7 +34,7 @@ func NewProjectPipeline(input Pipeline, proj *physical.Projection, evaluator *ex
 	// Create KEEP projection pipeline:
 	// Drop all columns except the ones referenced in proj.Expressions.
 	if !proj.All && !proj.Drop && !proj.Expand {
-		return newGenericProjectionPipeline(colRefs, func(refs []types.ColumnRef, ident *semconv.Identifier) bool {
+		return newKeepPipeline(colRefs, func(refs []types.ColumnRef, ident *semconv.Identifier) bool {
 			return slices.ContainsFunc(refs, func(ref types.ColumnRef) bool {
 				// Keep all of the ambiguous columns
 				if ref.Type == types.ColumnTypeAmbiguous {
@@ -49,7 +49,7 @@ func NewProjectPipeline(input Pipeline, proj *physical.Projection, evaluator *ex
 	// Create DROP projection pipeline:
 	// Keep all columns except the ones referenced in proj.Expressions.
 	if proj.All && proj.Drop {
-		return newGenericProjectionPipeline(colRefs, func(refs []types.ColumnRef, ident *semconv.Identifier) bool {
+		return newKeepPipeline(colRefs, func(refs []types.ColumnRef, ident *semconv.Identifier) bool {
 			return !slices.ContainsFunc(refs, func(ref types.ColumnRef) bool {
 				// Drop all of the ambiguous columns
 				if ref.Type == types.ColumnTypeAmbiguous {
@@ -70,7 +70,7 @@ func NewProjectPipeline(input Pipeline, proj *physical.Projection, evaluator *ex
 	return nil, errNotImplemented
 }
 
-func newGenericProjectionPipeline(colRefs []types.ColumnRef, keepFunc func([]types.ColumnRef, *semconv.Identifier) bool, input Pipeline) (*GenericPipeline, error) {
+func newKeepPipeline(colRefs []types.ColumnRef, keepFunc func([]types.ColumnRef, *semconv.Identifier) bool, input Pipeline) (*GenericPipeline, error) {
 	return newGenericPipeline(Local, func(ctx context.Context, inputs []Pipeline) (arrow.Record, error) {
 		input := inputs[0]
 		batch, err := input.Read(ctx)
@@ -90,7 +90,6 @@ func newGenericProjectionPipeline(colRefs []types.ColumnRef, keepFunc func([]typ
 			if keepFunc(colRefs, ident) {
 				columns = append(columns, batch.Column(i))
 				fields = append(fields, field)
-			} else {
 			}
 		}
 
